@@ -1,0 +1,15 @@
+
+# Ignore Excel files
+*.xls
+*.xlsx
+
+# Ignore CSV files
+*.csv
+
+# Ignore image files
+*.png
+*.jpg
+*.jpeg
+
+# Ignore all folders
+*/
