@@ -2,15 +2,190 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 from google.api_core.exceptions import Conflict,NotFound
 import pandas as pd
+import numpy as np 
 import json
 from constants import *
+import os
+from dateutil.relativedelta import relativedelta
+import itertools
 import datetime
 import pytz
+import warnings
+warnings.filterwarnings('ignore')
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# FUNCIONES POP
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+def transform_MIDAS(df):
+    # --- Define columns to extract ---
+    colNames = ["FECHA", "Y_PREDICCION", "NOMBRESUBDIRECCION", "NOMBREGRUPOESTADISTICO3", "MODEL"]
+    colNames2 = ["FECHA", "Y_PRONOSTICOS", "NOMBRESUBDIRECCION", "NOMBREGRUPOESTADISTICO3", "MODEL"]
+    colNames3 = ["FECHA", "Y_HIST", "NOMBRESUBDIRECCION", "NOMBREGRUPOESTADISTICO3"]
+
+    df1 = df[colNames].copy() #df["Y_PREDICCION"].notna()]
+    df1["Y_PREDICCION"] = df1["Y_PREDICCION"].astype(float) 
+    df2 = df[colNames2].copy() #df["Y_PRONOSTICOS"].notna()
+    df2["Y_PRONOSTICOS"] = df2["Y_PRONOSTICOS"].astype(float)
+    df2.columns = colNames  
+    df3 = df[df.MODEL == "BayesianRidge"][colNames3].copy()
+    df3["Y_HIST"] = df3["Y_HIST"].astype(float)
+    combined_df = pd.concat([df1, df2], ignore_index=True)
+    # --- Reorder columns: move Y_PREDICCION next to MODEL ---
+    cols = combined_df.columns.tolist()
+    y_pred_idx = cols.index("Y_PREDICCION")
+    model_idx = cols.index("MODEL")
+    cols.insert(model_idx + 1, cols.pop(y_pred_idx))
+    combined_df = combined_df[cols]
+    combined_df["Y_PREDICCION"] = combined_df["Y_PREDICCION"].astype(float)
+
+    res = pd.pivot_table(combined_df, index=["FECHA", "NOMBRESUBDIRECCION", "NOMBREGRUPOESTADISTICO3"], columns= "MODEL", values= "Y_PREDICCION", aggfunc= "mean" ).reset_index()
+    res = res.merge(df3, on = ["FECHA", "NOMBRESUBDIRECCION", "NOMBREGRUPOESTADISTICO3"], how = "outer", validate = "1:1")
+    res = res.rename(columns = {"FECHA":"MesAnio", "NOMBREGRUPOESTADISTICO3": "NombreGrupoEstadistico3", "NOMBRESUBDIRECCION": "NombreSubdireccion", "Y_HIST":"Y_HIST2"})
+    return res
+
+
+def load_fact_pvo_pv():
+    print("Consultando PV")
+    pv = data_bq(QUERY_HISTORICO_PV)
+    pv["id"] = pv[[ "NombreGrupo", "NombreDireccion", "NombreSubdireccion", "NombreGrupoEstadistico1", "NombreGrupoEstadistico2", "NombreGrupoEstadistico3"]].astype(str).agg("_".join, axis=1)
+
+    print("Consultando PVO")
+    pvo = data_bq(QUERY_HISTORICO_PVO)
+    pvo["id"] = pvo[[ "NombreGrupo", "NombreDireccion", "NombreSubdireccion", "NombreGrupoEstadistico1", "NombreGrupoEstadistico2", "NombreGrupoEstadistico3"]].astype(str).agg("_".join, axis=1)
+
+    print("Consultando FACT")
+    fact = data_bq(QUERY_HISTORICO_FACTURACION)
+    fact["id"] = fact[[ "NombreGrupo", "NombreDireccion", "NombreSubdireccion", "NombreGrupoEstadistico1", "NombreGrupoEstadistico2", "NombreGrupoEstadistico3"]].astype(str).agg("_".join, axis=1)
+    print(fact.id.nunique())
+
+    out = pvo.merge(pv, how = "outer", on = ["MesAnio","id","NombreGrupo","NombreDireccion","NombreSubdireccion","NombreGrupoEstadistico1","NombreGrupoEstadistico2","NombreGrupoEstadistico3"], validate = "1:1")
+    print(out.id.nunique())
+
+    out = out.merge(fact, how = "outer", on = ["MesAnio","id","NombreGrupo","NombreDireccion","NombreSubdireccion","NombreGrupoEstadistico1","NombreGrupoEstadistico2","NombreGrupoEstadistico3"], validate = "1:1")
+    print(out.id.nunique())
+
+    for i in ["toneladas_pvo","toneladas_plan_ventas","toneladas_facturadas"]:
+        # imputamos nulos con np.nan
+        out[i] = out[i].astype(float).fillna(np.nan)
+
+        #limitamos el valor absoluto cercano a cero a cero
+        out[i] = np.where(out[i].abs()<0.000001,0, out[i] )
+
+    out["MesAnio"] = pd.to_datetime(out["MesAnio"])
+
+    # SELECICONAMOS G32 DEL
+    g32del =  [' 8X19-26 AA GALV QUERETARO', '1X19-36 NEG QUERETARO','ACCESORIOS CROSBY QUERETARO', 'AL GALV CD', 'AL FORJAS C/TRAT (CHQ)',
+                'AL FORJAS C/TRAT', 'A.GALV. FINO', 'ALAMBRE PARA GAVIONES','ALAMBRE ESTAÑADO', 'SAW CUT', 'ALAMBRE PULIDO 25-29', 'REC IND (CHQ)',
+                'REFACCIONES GRAPADORAS', 'PROTECTOR DE VENTANA', 'CASTILLO DOB.','CABLE DE REFUERZO', 'REC IND FINO', 'CLAVO PARA HERRAR',
+                '6X19-26 AF NEG HOUSTON', 'PACKAGED', 'A. GALV. A.C. P/ CABLE', 'TRENZA PARA RESORTE', 'VALLA DEACERO', '8X31-41 AA NEG QUERETARO',
+                'INDUSTRIAL TOOLS', 'JOIST HANGER NAILS', 'DERECHO DE VIA','CUT STOCK REBAR', 'GRAPA TAPICERA', 'HEX-NETTING INDUSTRIAL'
+                ]
+    #  AGREGAMOS ALGUNOS FILTROS...
+    out = out[~out.NombreDireccion.isin(['ABAST. EXPORT', 'ABASTECIMIENTOS', 'DAL Y TRANSPORTE GRUPO DEACERO','IIDEA NACIONAL', 'H&H IRON AND METAL INC.', 'MAQUILAS'])]
+    out = out[~out.NombreSubdireccion.isin(['EXCEDENTES ACEROS', 'EXCEDENTES ALAMBRES', 'DSS NO METALICOS ', 'DEACERO-MID CONTINENT', 'FILIALES CANADA', 'RESTO ALAMBRES', 'RESTO INGETEK'])]
+    out = out[~out.NombreGrupoEstadistico1.isin(['CHATARRA', 'LOGÍSTICA', 'SEGUNDAS', 'INTERNAS PRODUCCION ', "DEACERO POWER"])]
+    out = out[~out.NombreGrupoEstadistico2.isin(['2D&3D', 'ALAMBRON', 'ALAMBRON OTROS', 'AMARRADORA DE VARILLA', 'SEGUNDAS / EXCEDENTES', 'PILOTES', 'SERVICIOS INGETEK', 'VARILLA FERRETERA'])]
+    out = out[~out.NombreGrupoEstadistico3.isin(g32del)]
+
+    return out
+
+def duplicados(FACT):
+    #ELIMINAMOS DUPLICADOS DE FILIALES....
+    FACT["id2"] = FACT[["NombreSubdireccion", "NombreGrupoEstadistico3"]].astype(str).agg("_".join, axis=1)
+    to_compare = FACT.groupby("id2")["NombreDireccion"].nunique()
+    vals_duplicated = to_compare [to_compare>1].index
+    #x = FACT[FACT["id2"].isin(vals_duplicated) & (FACT.MesAnio == "2025-08-01")].groupby(["id2","NombreGrupo", "NombreDireccion"]).agg({"toneladas_facturadas":"sum","toneladas_pvo" :"sum"})#.to_csv("file_csv.csv")
+    FACT = FACT[~(FACT.id2.isin(vals_duplicated) & (FACT.NombreDireccion == "FILIALES"))]
+    return FACT
+
+
+def calcular_tp_meses(df, lags_years):
+    #funcioon que promedia mismos meses de los ultimos n años...
+    # Crear los lags usando .transform()
+    df["toneladas_facturadas2"] =df["toneladas_facturadas"].fillna(0) 
+    
+    # Crear los lags correctamente
+    for lag in range(1, lags_years + 1):
+        df[f'lag_{lag}'] = df.groupby("id")['toneladas_facturadas'].transform(lambda x: x.shift(lag * 12))
+
+    # Calcular TP_MESES como el promedio de los lags
+    lag_cols = [f'lag_{lag}' for lag in range(1, lags_years + 1)]
+    df['TP_MESES'] = df[lag_cols].mean(axis=1)
+    df = df.drop(columns =lag_cols )
+
+    return df.drop(columns = "toneladas_facturadas2")
+
+
+def calcular_tp_movil(FACT, date_today):
+    # funci que calcula media movil para train y teest 
+    LIST_DIR = [] 
+    grouped = FACT.groupby('id')
+    for a_, data in grouped:
+        #print(a_, len(LIST_DIR))
+        data = data[["MesAnio","toneladas_facturadas"]].set_index("MesAnio")
+        data["id"] = a_
+        data["TP_MOVIL"] = None
+        data["fcst"] = data.toneladas_facturadas
+        for date in data.index:
+            start_date = date - pd.DateOffset(months=7)
+            end_date = date - pd.DateOffset(months=1)
+            if date < date_today: 
+                data.loc[date, "TP_MOVIL"] = data.loc[(data.index> start_date) & (data.index<= end_date) ,"toneladas_facturadas"].mean()
+            else:
+                data.loc[date, "fcst"] =  data.loc[(data.index > start_date) & (data.index<= end_date) ,"fcst"].mean()
+            data["TP_MOVIL"] = np.where(data.index <date_today, data["TP_MOVIL"], data["fcst"] )
+        LIST_DIR.append(data[["id", "TP_MOVIL"]])
+    return pd.concat(LIST_DIR).reset_index()
+    
+
+def add_zeros(df ,date_today):
+     
+    print(df.shape)
+    fechas = df['MesAnio'].unique()
+    id = df['id'].unique()
+
+    # Generar todas las combinaciones posibles
+    combinaciones = pd.DataFrame(list(itertools.product(fechas, id)), columns=['MesAnio',"id"])
+
+    for i, col  in enumerate([ "NombreGrupo", "NombreDireccion", "NombreSubdireccion", "NombreGrupoEstadistico1", "NombreGrupoEstadistico2", "NombreGrupoEstadistico3"]):
+        # agregamos columnas en el df aplicando el split
+        print(i, col)
+        combinaciones[col] = combinaciones["id"].str.split("_").apply(lambda x:x[i])
+
+    # Unir con el DataFrame original
+    df_completo = pd.merge(combinaciones, df, on = ["MesAnio","id","NombreGrupo","NombreDireccion","NombreSubdireccion","NombreGrupoEstadistico1","NombreGrupoEstadistico2","NombreGrupoEstadistico3"], how='left')
+    
+    df_completo["valid_ton"] = df_completo[["toneladas_pvo","toneladas_plan_ventas","toneladas_facturadas"]].fillna(0).sum(axis = 1)
+
+    df_completo = df_completo.sort_values(by=['id', 'MesAnio'])
+    df["toneladas_facturadas"] =df["toneladas_facturadas"].fillna(0)
+
+    # TP MESES -----------------------------------------------------------------------------------------------
+    df_completo = calcular_tp_meses(df_completo, lags_years = 3)
+    #df_completo = df_completo.set_index("MesAnio", drop=True)
+
+    # TP MOVIL -----------------------------------------------------------------------------------------------
+    TPMOVIL = calcular_tp_movil(df_completo, date_today)
+    df_completo = df_completo.merge(TPMOVIL, how = "left", on = ["id", "MesAnio"], validate= "1:1")
+
+    #filtramos ids conflictivos
+    df_completo["id2"] = df_completo[["NombreSubdireccion", "NombreGrupoEstadistico3"]].astype(str).agg("_".join, axis=1)
+    x = df_completo[(df_completo.NombreGrupo == "TRASPASOS E INTEREMPRESAS") & (df_completo.NombreDireccion == "FILIALES")].groupby("id2").agg({"toneladas_facturadas":"sum","toneladas_pvo" :"sum"})
+    ids2del =  x[x["toneladas_pvo"] == 0].index
+    df_completo = df_completo[~df_completo.isin(ids2del)]
+
+    df_completo = duplicados(df_completo)
+    #FILTRAMOS SOLO 2025 EN ADELANTE    ------------------------------
+    df_completo = df_completo[df_completo["MesAnio"].dt.year >=2025 ]
+    print(df_completo.id2.nunique())
+    return df_completo
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def data_bq(query):
     client = bigquery.Client(project="demanda-prj-dev")
     query = client.query(query)
-    pv = query.to_dataframe(create_bqstorage_client=True)
+    pv = query.to_dataframe() #create_bqstorage_client=True
     return pv
 
 def import_validation_data_from_bigquery ():
@@ -273,7 +448,6 @@ def automatizacion_comparativa_resultados ():
     return dataframe_mape.reset_index(drop=True),dataframe_evaluacion.reset_index(drop=True),dataframe_pronostico.reset_index(drop=True)
 
 def tabla_mape(dataframe):
-
     dataframe_mape = dataframe.copy()
     dataframe_mape = dataframe_mape['MODEL'].value_counts().reset_index()
     dataframe_mape.rename(columns={'count':'COMBINACIONES'},inplace=True)
@@ -281,5 +455,4 @@ def tabla_mape(dataframe):
     dataframe_mape = dataframe_mape.groupby(by=['MODEL']).agg({'COMBINACIONES':'sum'}).reset_index()
     dataframe_mape['PROPORCION'] = (dataframe_mape['COMBINACIONES'] / dataframe_mape['COMBINACIONES'].sum())*100
     dataframe_mape['PROPORCION'] = dataframe_mape['PROPORCION'].apply(lambda x: f"{x:.1f} %")
-
     return dataframe_mape.sort_values(by='COMBINACIONES',ascending=False).reset_index(drop=True)

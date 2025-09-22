@@ -1452,7 +1452,7 @@ data_base.NombreGrupoEstadistico1,
 data_base.NombreGrupoEstadistico2,
 data_base.NombreGrupoEstadistico3
 )
-WHERE MesAnio <= '2026-01-01'
+WHERE MesAnio <= '2026-02-01'
 ORDER BY MesAnio ASC, toneladas_facturadas DESC
 """
 
@@ -1509,7 +1509,7 @@ data_base.NombreGrupoEstadistico1,
 data_base.NombreGrupoEstadistico2,
 data_base.NombreGrupoEstadistico3
 )
-WHERE MesAnio <= '2026-01-01'
+WHERE MesAnio <= '2026-02-01'
 ORDER BY MesAnio ASC, toneladas_pvo DESC
 """
 
@@ -1568,7 +1568,7 @@ data_base.NombreGrupoEstadistico1,
 data_base.NombreGrupoEstadistico2,
 data_base.NombreGrupoEstadistico3
 )
-WHERE MesAnio <= '2026-01-01'
+WHERE MesAnio <= '2026-02-01'
 # WHERE MesAnio < FORMAT_DATE('%Y-%m-%d', DATE_TRUNC(CURRENT_DATE(), MONTH))
 ORDER BY MesAnio ASC, toneladas_plan_ventas DESC
 """
