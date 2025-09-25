@@ -176,7 +176,7 @@ def add_zeros(df ,date_today):
 
     df_completo = duplicados(df_completo)
     #FILTRAMOS SOLO 2025 EN ADELANTE    ------------------------------
-    df_completo = df_completo[df_completo["MesAnio"].dt.year >=2025 ]
+    df_completo = df_completo[df_completo["MesAnio"].dt.year >=2024 ]
     print(df_completo.id2.nunique())
     return df_completo
 
