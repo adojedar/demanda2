@@ -138,7 +138,7 @@ def calcular_tp_movil(FACT, date_today):
     return pd.concat(LIST_DIR).reset_index()
     
 
-def add_zeros(df ,date_today):
+def add_zeros(df ,date_today, min_year = 2024):
      
     print(df.shape)
     fechas = df['MesAnio'].unique()
@@ -176,7 +176,7 @@ def add_zeros(df ,date_today):
 
     df_completo = duplicados(df_completo)
     #FILTRAMOS SOLO 2025 EN ADELANTE    ------------------------------
-    df_completo = df_completo[df_completo["MesAnio"].dt.year >=2024 ]
+    df_completo = df_completo[df_completo["MesAnio"].dt.year >= min_year ]
     print(df_completo.id2.nunique())
     return df_completo
 
