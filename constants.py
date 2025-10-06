@@ -9,7 +9,7 @@ DEEPGRANULARITY = 'NOMBREGRUPOESTADISTICO3' if GRANULARITY == 'NOMBRESUBDIRECCIO
 GRANULARITY_HISTORICO = 'NombreSubdireccion' # 'PuntoLogistico'
 DEEPGRANULARITY_HISTORICO = 'NombreGrupoEstadistico3' if GRANULARITY_HISTORICO == 'NombreSubdireccion' else 'SKU'
 ordenamiento_columnas = ['FECHA','NOMBREGRUPO','NOMBREDIRECCION','NOMBRESUBDIRECCION','NOMBREGRUPOESTADISTICO1','NOMBREGRUPOESTADISTICO2','NOMBREGRUPOESTADISTICO3','MODEL','PRONOSTICO']
-
+MINYEAR = 2018
 QUERY_RESULTADOS_MODEL2 = """
 SELECT 
   `FECHA_EJECUCION`,
@@ -1409,7 +1409,7 @@ nom_grupo_estadistico2 AS NombreGrupoEstadistico2,
 nom_grupo_estadistico3 AS NombreGrupoEstadistico3,
 toneladas_facturadas AS toneladas_facturadas
 FROM `datahub-deacero.mart_comercial.comercial` 
-WHERE EXTRACT(YEAR FROM fecha) >= 2022 # Este es el que vamos a usar en productivo
+WHERE EXTRACT(YEAR FROM fecha) >= {MINYEAR} # Este es el que vamos a usar en productivo
 )
 
 # Agregar un cambio de valores para los cuales toneladas_facturadas es 0 si el valor original es negativo
@@ -1468,7 +1468,7 @@ nom_grupo_estadistico2 AS NombreGrupoEstadistico2,
 nom_grupo_estadistico3 AS NombreGrupoEstadistico3,
 toneladas_pvo AS toneladas_pvo
 FROM `datahub-deacero.mart_comercial.comercial` 
-WHERE EXTRACT(YEAR FROM fecha) >= 2022 # Este es el que vamos a usar en productivo
+WHERE EXTRACT(YEAR FROM fecha) >= {MINYEAR} # Este es el que vamos a usar en productivo
 )
 # Agregar un cambio de valores para los cuales toneladas_pvo es 0 si el valor original es negativo
 
@@ -1527,7 +1527,7 @@ nom_grupo_estadistico2 AS NombreGrupoEstadistico2,
 nom_grupo_estadistico3 AS NombreGrupoEstadistico3,
 toneladas_plan_ventas AS toneladas_plan_ventas
 FROM `datahub-deacero.mart_comercial.comercial` 
-WHERE EXTRACT(YEAR FROM fecha) >= 2022 # Este es el que vamos a usar en productivo
+WHERE EXTRACT(YEAR FROM fecha) >= {MINYEAR} # Este es el que vamos a usar en productivo
 #AND nom_gerencia NOT IN ('ACERIAS SPOT')
 )
 # Agregar un cambio de valores para los cuales toneladas_plan_ventas es 0 si el valor original es negativo
