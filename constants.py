@@ -10,6 +10,7 @@ GRANULARITY_HISTORICO = 'NombreSubdireccion' # 'PuntoLogistico'
 DEEPGRANULARITY_HISTORICO = 'NombreGrupoEstadistico3' if GRANULARITY_HISTORICO == 'NombreSubdireccion' else 'SKU'
 ordenamiento_columnas = ['FECHA','NOMBREGRUPO','NOMBREDIRECCION','NOMBRESUBDIRECCION','NOMBREGRUPOESTADISTICO1','NOMBREGRUPOESTADISTICO2','NOMBREGRUPOESTADISTICO3','MODEL','PRONOSTICO']
 MINYEAR = 2018
+MAXYEAR = "'2026-03-01'"
 QUERY_RESULTADOS_MODEL2 = """
 SELECT 
   `FECHA_EJECUCION`,
@@ -1452,7 +1453,7 @@ data_base.NombreGrupoEstadistico1,
 data_base.NombreGrupoEstadistico2,
 data_base.NombreGrupoEstadistico3
 )
-WHERE MesAnio <= '2026-02-01'
+WHERE MesAnio <= {MAXYEAR}
 ORDER BY MesAnio ASC, toneladas_facturadas DESC
 """
 
@@ -1509,7 +1510,7 @@ data_base.NombreGrupoEstadistico1,
 data_base.NombreGrupoEstadistico2,
 data_base.NombreGrupoEstadistico3
 )
-WHERE MesAnio <= '2026-02-01'
+WHERE MesAnio <= {MAXYEAR}
 ORDER BY MesAnio ASC, toneladas_pvo DESC
 """
 
@@ -1568,7 +1569,7 @@ data_base.NombreGrupoEstadistico1,
 data_base.NombreGrupoEstadistico2,
 data_base.NombreGrupoEstadistico3
 )
-WHERE MesAnio <= '2026-02-01'
+WHERE MesAnio <= {MAXYEAR}
 # WHERE MesAnio < FORMAT_DATE('%Y-%m-%d', DATE_TRUNC(CURRENT_DATE(), MONTH))
 ORDER BY MesAnio ASC, toneladas_plan_ventas DESC
 """
